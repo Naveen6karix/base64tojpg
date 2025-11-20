@@ -16,25 +16,37 @@ img_url = params.get("url", [""])[0]
 
 user_url = st.text_input("Input Image URL:", value=img_url)
 
+# Get the base URL correctly for Streamlit deployments
+base_url = st.secrets.get("BASE_URL", "")
+
+if not base_url:
+    # Fallback: Try to detect automatically
+    try:
+        base_url = st.experimental_get_query_params().get("parent", [""])[0]
+    except:
+        base_url = ""
+
 if st.button("Convert") and user_url.strip():
     try:
-        # Download input image
+        # Download the AVIF/WEBP/PNG image
         r = requests.get(user_url, timeout=15)
         r.raise_for_status()
 
-        # Convert to JPG
+        # Convert → JPG
         img = Image.open(BytesIO(r.content)).convert("RGB")
 
-        # Save JPG in static directory
+        # Save JPG in static/ folder
         file_id = str(uuid.uuid4()) + ".jpg"
-        save_path = f"static/{file_id}"
-
         os.makedirs("static", exist_ok=True)
-
+        save_path = f"static/{file_id}"
         img.save(save_path, format="JPEG")
 
-        # Public URL
-        public_url = f"{st.request.url.rsplit('/',1)[0]}/static/{file_id}"
+        # Build public file URL
+        # ---------------------------------------------------------
+        # BEST METHOD: Use Streamlit Server URL
+        # ---------------------------------------------------------
+        # Streamlit automatically makes /static/ public
+        public_url = f"{st.server.server_address}/static/{file_id}"
 
         st.success("✔ Conversion Successful")
         st.subheader("JPG File URL:")

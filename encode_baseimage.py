@@ -1,28 +1,34 @@
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
-import requests
+import streamlit as st
 from PIL import Image
 from io import BytesIO
+import requests
 
-app = FastAPI(title="AVIF/WebP → JPG API Converter")
+st.title("🖼 AVIF/WebP → JPG Converter")
 
-@app.get("/convert")
-def convert_to_jpg(url: str = Query(..., description="URL of AVIF/WebP image")):
+# Input URL from user
+img_url = st.text_input("Enter AVIF/WebP Image URL:")
+
+if img_url:
     try:
-        # Fetch image from URL
-        response = requests.get(url, timeout=10)
+        # Download image
+        response = requests.get(img_url)
         response.raise_for_status()
+        img_bytes = BytesIO(response.content)
 
-        # Open image and convert to JPG
-        img = Image.open(BytesIO(response.content)).convert("RGB")
+        # Convert to JPG
+        img = Image.open(img_bytes).convert("RGB")
         output = BytesIO()
         img.save(output, format="JPEG")
         output.seek(0)
 
-        # Return as streaming response
-        return StreamingResponse(output, media_type="image/jpeg")
+        # Show image and download button
+        st.image(img, caption="Converted JPG", use_column_width=True)
+        st.download_button(
+            label="⬇ Download JPG",
+            data=output,
+            file_name="converted.jpg",
+            mime="image/jpeg"
+        )
 
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch image: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to convert image: {e}")
+        st.error(f"❌ Failed to convert: {e}")

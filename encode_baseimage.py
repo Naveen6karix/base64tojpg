@@ -1,64 +1,54 @@
 import streamlit as st
-import base64
 import requests
-from io import BytesIO
 from PIL import Image
-import urllib.parse
+from io import BytesIO
 
-st.set_page_config(page_title="AVIF to JPG API", layout="centered")
+st.set_page_config(page_title="AVIF → JPG API", page_icon="🖼️")
 
-st.title("AVIF → JPG API")
+st.title("AVIF → JPG API Converter")
+st.write("Use this API like:")
+st.code("https://your-app.streamlit.app/?url=IMAGE_URL")
 
-# -------------------------------
-# API MODE (when ?url= is present)
-# -------------------------------
-query = st.experimental_get_query_params()
+# Read URL param
+avif_url = st.query_params.get("url", "")
 
-if "url" in query:
-    # Normal (not encoded) link from user
-    raw_url = query["url"][0]
+if not avif_url:
+    st.warning("❗ Add URL param:  ?url=https://example.com/image.avif")
+    st.stop()
 
-    # Encode the URL safely
-    encoded_url = urllib.parse.quote(raw_url, safe=":/?=&")
+st.write("### Input Image URL:")
+st.code(avif_url)
 
-    try:
-        response = requests.get(encoded_url, timeout=10)
-        response.raise_for_status()
+try:
+    # Fetch AVIF image
+    response = requests.get(avif_url, timeout=15)
+    response.raise_for_status()
+    avif_bytes = response.content
 
-        avif_bytes = BytesIO(response.content)
+    # Convert AVIF → JPG
+    img = Image.open(BytesIO(avif_bytes)).convert("RGB")
 
-        try:
-            img = Image.open(avif_bytes).convert("RGB")
-        except:
-            return_error = {"error": "Cannot decode AVIF image"}
-            st.json(return_error)
-            st.stop()
+    # Save JPEG in memory
+    jpg_buffer = BytesIO()
+    img.save(jpg_buffer, format="JPEG")
+    jpg_buffer.seek(0)
 
-        # Convert to JPG buffer
-        buffer = BytesIO()
-        img.save(buffer, format="JPEG", quality=90)
-        jpeg_bytes = buffer.getvalue()
+    # Create downloadable link
+    st.success("✔ Conversion Successful")
 
-        base64_str = base64.b64encode(jpeg_bytes).decode("utf-8")
+    st.download_button(
+        label="⬇ Download JPG",
+        data=jpg_buffer,
+        file_name="converted.jpg",
+        mime="image/jpeg"
+    )
 
-        st.json({"base64": base64_str})
-        st.stop()
+    # API output JSON-style
+    st.write("### API Output (link only):")
+    st.json({
+        "status": "success",
+        "jpg_download": st.experimental_get_query_params()
+    })
 
-    except Exception as e:
-        st.json({"error": str(e)})
-        st.stop()
-
-
-# -------------------------------
-# Normal UI Mode (No API)
-# -------------------------------
-st.write("Use this API like this:")
-st.code(
-    "https://your-app-url.streamlit.app/?url=YOUR_IMAGE_URL",
-    language="bash"
-)
-
-st.write("Example:")
-st.code(
-    "https://your-app-url.streamlit.app/?url=https://manyavar.scene7.com/is/image/manyavar/KOS009-301-White.13638_21-03-2024-14-19"
-)
+except Exception as e:
+    st.error(f"❌ Failed to convert: {e}")

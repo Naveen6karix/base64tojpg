@@ -2,66 +2,81 @@ import streamlit as st
 import requests
 from PIL import Image
 from io import BytesIO
+import os
 
 st.set_page_config(page_title="AVIF → JPG API", page_icon="🖼")
 
 st.title("🖼 AVIF → JPG API Converter")
 
-st.write("Use this API like:\n\n"
-         "`https://your-app.streamlit.app/?url=IMAGE_URL`\n")
+st.write("Use this API like:")
+st.code("https://your-app.streamlit.app/?url=IMAGE_URL")
 
 
-# --- Get URL from query parameters ---
-query_params = st.query_params
-image_url = query_params.get("url", [None])[0]
+# -----------------------------
+# GET QUERY PARAM
+# -----------------------------
+params = st.query_params
+image_url = params.get("url", [None])[0]
 
-# --- UI Input ---
+
+# -----------------------------
+# INPUT FIELD
+# -----------------------------
 user_url = st.text_input("Input Image URL:", value=image_url if image_url else "")
 
-def is_valid(url: str) -> bool:
+
+def is_valid_url(url: str) -> bool:
     return url.startswith("http://") or url.startswith("https://")
 
 
-# --- Convert Function ---
-def convert_avif_to_jpg(image_url: str):
-    # Download AVIF
-    r = requests.get(image_url, timeout=10)
-    r.raise_for_status()
+# -----------------------------
+# CONVERSION FUNCTION
+# -----------------------------
+def convert_avif_to_jpg(url: str) -> BytesIO:
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
 
-    # Convert AVIF → JPG
-    img = Image.open(BytesIO(r.content)).convert("RGB")
-    out = BytesIO()
-    img.save(out, format="JPEG")
-    out.seek(0)
+    img = Image.open(BytesIO(response.content)).convert("RGB")
 
-    return out
+    output = BytesIO()
+    img.save(output, format="JPEG")
+    output.seek(0)
+    return output
 
 
-# --- PROCESS ---
-final_url = user_url.strip()
+# -----------------------------
+# STATIC FOLDER FOR DOWNLOAD LINK
+# -----------------------------
+STATIC_FOLDER = "static"
+os.makedirs(STATIC_FOLDER, exist_ok=True)
 
+
+# -----------------------------
+# PROCESS
+# -----------------------------
 if st.button("Convert"):
 
-    if not final_url:
-        st.error("❌ Please enter an image URL.")
-    elif not is_valid(final_url):
-        st.error("❌ Invalid URL. It must start with http:// or https://")
+    if not user_url.strip():
+        st.error("❌ Please enter a URL.")
+    elif not is_valid_url(user_url):
+        st.error("❌ Invalid URL. Must start with http:// or https://")
     else:
         try:
-            jpg_file = convert_avif_to_jpg(final_url)
+            jpg_data = convert_avif_to_jpg(user_url)
 
-            # Create a temporary public link
-            download_url = st.experimental_upload_file(
-                "converted.jpg", jpg_file.getvalue(), "image/jpeg"
-            )
+            output_path = os.path.join(STATIC_FOLDER, "converted.jpg")
+            with open(output_path, "wb") as f:
+                f.write(jpg_data.getvalue())
 
-            st.success("✔ Conversion Successful")
+            # Public link (Streamlit automatically serves /static/* files)
+            app_base = st.get_option("browser.serverAddress")
+            app_port = st.get_option("browser.serverPort")
 
-            if download_url:
-                st.write("### API Output (JPG link):")
-                st.code(download_url, language="text")
-            else:
-                st.error("❌ Failed to generate download URL.")
+            download_link = f"https://{app_base}/static/converted.jpg"
+
+            st.success("✔ Conversion Successful!")
+            st.write("### API Output (JPG Link):")
+            st.code(download_link)
 
         except Exception as e:
             st.error(f"❌ Failed to convert: {e}")

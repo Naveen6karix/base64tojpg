@@ -3,12 +3,61 @@ import base64
 import requests
 from PIL import Image
 from io import BytesIO
+import os
+import uuid
+import json
+
+# ---------------------------------------------------------
+#               API MODE: AVIF URL → JPG
+# ---------------------------------------------------------
+
+query_params = st.experimental_get_query_params()
+
+if "avif_url" in query_params:
+    avif_url = query_params["avif_url"][0]
+
+    try:
+        # Download AVIF image
+        response = requests.get(avif_url, timeout=10)
+        response.raise_for_status()
+
+        avif_bytes = response.content
+
+        # Convert AVIF → JPG
+        img = Image.open(BytesIO(avif_bytes)).convert("RGB")
+
+        # Save JPG into /static
+        os.makedirs("static", exist_ok=True)
+        filename = f"{uuid.uuid4()}.jpg"
+        filepath = os.path.join("static", filename)
+        img.save(filepath, "JPEG")
+
+        # Build public URL
+        base_url = "https://base64tojpg-nqy3cuvfdnnbgp8htt5ecn.streamlit.app"
+        jpg_url = f"{base_url}/static/{filename}"
+
+        # Return JSON response
+        st.write(json.dumps({
+            "status": "success",
+            "jpg_url": jpg_url
+        }))
+
+        st.stop()
+
+    except Exception as e:
+        st.write(json.dumps({
+            "status": "error",
+            "message": str(e)
+        }))
+        st.stop()
+
+
+# ---------------------------------------------------------
+#              NORMAL STREAMLIT UI MODE
+# ---------------------------------------------------------
 
 st.set_page_config(page_title="🖼️ Image ↔ Base64 Converter", page_icon="🧩", layout="wide")
-
 st.title("🧩 Image ↔ Base64 Converter")
-
-st.write("Convert images to Base64 or convert Base64 back to JPG.")
 
 tab1, tab2 = st.tabs(["🔼 Image → Base64", "🔽 Base64 → JPG"])
 
@@ -26,7 +75,7 @@ with tab1:
         image_source = None
 
         if option == "Upload Image":
-            uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png", "gif", "webp"])
+            uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png", "gif", "webp", "avif"])
             if uploaded_file:
                 image_data = uploaded_file.read()
                 image_source = uploaded_file.name
@@ -72,24 +121,18 @@ with tab2:
             st.error("❌ Please paste a Base64 string!")
         else:
             try:
-                # Clean Base64 string
+                # Clean base64
                 b64_clean = base64_input.strip().replace("\n", "").replace(" ", "")
-
-                # Fix missing padding
                 missing_padding = len(b64_clean) % 4
                 if missing_padding:
                     b64_clean += "=" * (4 - missing_padding)
 
-                # Fix URL-safe Base64
                 b64_clean = b64_clean.replace("-", "+").replace("_", "/")
 
-                # Decode Base64
                 decoded_bytes = base64.b64decode(b64_clean)
 
-                # Convert to image
                 img = Image.open(BytesIO(decoded_bytes)).convert("RGB")
 
-                # Save JPG in memory
                 output = BytesIO()
                 img.save(output, format="JPEG")
                 output.seek(0)

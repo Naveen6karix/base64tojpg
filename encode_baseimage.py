@@ -2,54 +2,43 @@ import streamlit as st
 import requests
 from PIL import Image
 from io import BytesIO
-import base64
+import uuid
+import os
 
 st.set_page_config(page_title="AVIF → JPG API", page_icon="🖼️")
 
 st.title("AVIF → JPG API Converter")
 st.write("Use this API like:<br>https://your-app.streamlit.app/?url=IMAGE_URL", unsafe_allow_html=True)
 
-# ----------------------
-# Read query ?url=
-# ----------------------
+# Read ?url= parameter
 params = st.query_params
 img_url = params.get("url", [""])[0]
 
-# Input Box
 user_url = st.text_input("Input Image URL:", value=img_url)
 
-# If URL present → auto convert
-auto_convert = bool(user_url.strip())
-
-if auto_convert and st.button("Convert"):
+if st.button("Convert") and user_url.strip():
     try:
-        # Download image
-        r = requests.get(user_url, timeout=10)
+        # Download input image
+        r = requests.get(user_url, timeout=15)
         r.raise_for_status()
 
+        # Convert to JPG
         img = Image.open(BytesIO(r.content)).convert("RGB")
 
-        # Convert to JPG in memory
-        output_buffer = BytesIO()
-        img.save(output_buffer, format="JPEG")
-        output_buffer.seek(0)
+        # Save JPG in static directory
+        file_id = str(uuid.uuid4()) + ".jpg"
+        save_path = f"static/{file_id}"
 
-        # Generate downloadable link (base64 file)
-        b64 = base64.b64encode(output_buffer.read()).decode()
-        download_link = f"data:image/jpeg;base64,{b64}"
+        os.makedirs("static", exist_ok=True)
+
+        img.save(save_path, format="JPEG")
+
+        # Public URL
+        public_url = f"{st.request.url.rsplit('/',1)[0]}/static/{file_id}"
 
         st.success("✔ Conversion Successful")
-
-        st.subheader("API Output (link only):")
-        st.write(download_link)
-
-        # Also provide button
-        st.download_button(
-            label="⬇ Download JPG",
-            data=base64.b64decode(b64),
-            file_name="converted.jpg",
-            mime="image/jpeg"
-        )
+        st.subheader("JPG File URL:")
+        st.write(public_url)
 
     except Exception as e:
         st.error(f"❌ Failed to convert: {e}")

@@ -1,51 +1,28 @@
-import streamlit as st
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 import requests
 from PIL import Image
 from io import BytesIO
 
-st.set_page_config(page_title="AVIF → JPG API Converter", page_icon="🖼")
+app = FastAPI(title="AVIF/WebP → JPG API Converter")
 
-st.title("🖼 AVIF → JPG API Converter")
-
-st.write("""Use this API like:https://your-app.streamlit.app/?url=IMAGE_URL""")
-
-# -----------------------------------------
-# READ QUERY PARAM "url"
-# -----------------------------------------
-params = st.query_params
-img_url = params.get("url", [None])[0]
-
-# -----------------------------------------
-# INPUT BOX (auto-filled if ?url= provided)
-# -----------------------------------------
-url = st.text_input("Input Image URL:", value=img_url or "")
-
-# -----------------------------------------
-# PROCESS BUTTON (or auto-run if ?url= is present)
-# -----------------------------------------
-if url:
+@app.get("/convert")
+def convert_to_jpg(url: str = Query(..., description="URL of AVIF/WebP image")):
     try:
-        # Fetch image bytes
+        # Fetch image from URL
         response = requests.get(url, timeout=10)
         response.raise_for_status()
 
-        img_bytes = BytesIO(response.content)
-
-        # Convert to JPG
-        img = Image.open(img_bytes).convert("RGB")
+        # Open image and convert to JPG
+        img = Image.open(BytesIO(response.content)).convert("RGB")
         output = BytesIO()
         img.save(output, format="JPEG")
         output.seek(0)
 
-        st.success("✔ Conversion Successful")
+        # Return as streaming response
+        return StreamingResponse(output, media_type="image/jpeg")
 
-        # Provide download link only
-        st.download_button(
-            label="⬇ Download JPG",
-            data=output,
-            file_name="converted.jpg",
-            mime="image/jpeg"
-        )
-
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch image: {e}")
     except Exception as e:
-        st.error(f"❌ Failed to convert: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to convert image: {e}")
